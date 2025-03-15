@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  # Postgres Database
+  postgres:
+    image: postgres:latest
+    container_name: log_parser_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - monitoring
+
+  # Database Quere and see logs
+  adminer:
+    image: adminer
+    container_name: log_parser_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - monitoring
+
+  # Proxy Config && Log of Proxy is insert into Database from Python script 
+  nginx:
+    image: nginx
+    container_name: log_parser_nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./logs:/var/log/nginx
+      - ./ssl:/etc/nginx/ssl
+    ports:
+       - "80:80"
+       - "443:443"
+    networks:
+      - monitoring
+
+  # Python script to insert log into Postgres Database 
+  python:
+    build: .
+    container_name: log_parser_python
+    restart: on-failure
+    environment:
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      LOG_FILE_PATH: ${LOG_FILE_PATH}
+    depends_on:
+      - postgres
+      - nginx
+    # ports:
+    #   # - "8080:8080"
+    volumes:
+      - ./logs:/var/log/nginx
+      - ./script:/app
+
+    working_dir: /app
+    command: ["python", "log_parser.py"]
+    networks:
+      - monitoring
+
+volumes:
+  pgdata:
+networks:
+  monitoring:
+    driver: bridge
