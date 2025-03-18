@@ -6,12 +6,13 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 
+load_dotenv()  # Load .env variables
 
-## log file 
+## Log file 
 LOG_FILE = "/var/log/nginx/access.log"  
 ERROR_PATTERN = re.compile(r'(\d{3})\s.*CN=([a-zA-Z0-9.-]+)')
 
-# Database connectiong 
+# Database connection
 DB_CONFIG = {
     "dbname": os.getenv("DB_NAME"),
     "user": os.getenv("DB_USER"),
@@ -20,17 +21,32 @@ DB_CONFIG = {
     "port": 5432,
 }
 
+# HTTP Status Code Descriptions
+HTTP_STATUS_DESCRIPTIONS = {
+    "200": "OK",
+    "301": "Moved Permanently",
+    "302": "Found",
+    "400": "Bad Request",
+    "401": "Unauthorized",
+    "403": "Forbidden",
+    "404": "Not Found",
+    "500": "Internal Server Error",
+    "502": "Bad Gateway",
+    "503": "Service Unavailable",
+    "504": "Gateway Timeout"
+}
 
 # SQL Tables
 CREATE_TABLE_HTTP = """
 CREATE TABLE IF NOT EXISTS http_status_counts (
     id SERIAL PRIMARY KEY,
     status_code INT NOT NULL,
+    description TEXT,
     count INT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
-# SQL Tables
+
 CREATE_TABLE_CN = """
 CREATE TABLE IF NOT EXISTS cn_counts (
     id SERIAL PRIMARY KEY,
@@ -55,17 +71,8 @@ def parse_http_statuses(log_file):
     return counter
 
 # Extract CNs from logs
-CN_PATTERN = re.compile(r'CN=([a-zA-Z0-9.-]+)')
-
 def parse_bad_cns(log_file):
     counter = Counter()
-
-    # with open(log_file, "r") as file:
-    #     for line in file:
-    #         match = CN_PATTERN.search(line)
-    #         if match:
-    #             cn = match.group(1)
-    #             counter[cn] += 1
 
     with open(log_file, "r") as file:
         for line in file:
@@ -80,22 +87,23 @@ def parse_bad_cns(log_file):
     return counter
 
 # Insert data into PostgreSQL
-def insert_into_db(status_counts, cn_counts):
+def insert_into_db(http_counts, cn_counts):
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
     
-    # Creating if table does not exist
+    # Create tables
     cur.execute(CREATE_TABLE_HTTP)
     cur.execute(CREATE_TABLE_CN)
 
-    # Insert to db 
-    for status, count in status_counts.items():
+    # Insert HTTP status codes
+    for status, count in http_counts.items():
+        description = HTTP_STATUS_DESCRIPTIONS.get(status, "Unknown")
         cur.execute(
-            "INSERT INTO http_status_counts (status_code, count, timestamp) VALUES (%s, %s, %s);",
-            (status, count, datetime.now()),
+            "INSERT INTO http_status_counts (status_code, description, count, timestamp) VALUES (%s, %s, %s, %s);",
+            (status, description, count, datetime.now()),
         )
 
-    # Insert to db 
+    # Insert CN counts
     for cn, count in cn_counts.items():
         cur.execute(
             "INSERT INTO cn_counts (cn, count, timestamp) VALUES (%s, %s, %s);",
@@ -107,7 +115,7 @@ def insert_into_db(status_counts, cn_counts):
     conn.close()
     print(f"✅ Data inserted at {datetime.now()}")
 
-# Run CMD
+# Run
 if __name__ == "__main__":
     while True:
         http_counts = parse_http_statuses(LOG_FILE)
@@ -118,4 +126,4 @@ if __name__ == "__main__":
         else:
             print(f"⚠️ No new data found at {datetime.now()}")
 
-        time.sleep(120)  # Sleep for 2 minutes (120 seconds)
+        time.sleep(120)  # Sleep for 2 minutes

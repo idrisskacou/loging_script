@@ -1,4 +1,5 @@
 .env
+
 ssl/*
 logs/*
 sslk/*
