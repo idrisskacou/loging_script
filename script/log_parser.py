@@ -11,6 +11,7 @@ load_dotenv()  # Load .env variables
 ## Log file 
 LOG_FILE = "/var/log/nginx/access.log"  
 ERROR_PATTERN = re.compile(r'(\d{3})\s.*CN=([a-zA-Z0-9.-]+)')
+ERROR_PATTERN = re.compile(r'HTTP/1\.\d"\s(\d{3})\s|CN=([^,]+)')
 
 # Database connection
 DB_CONFIG = {
